@@ -419,52 +419,44 @@
       '</defs></svg>';
   }
 
-  var TURN_ORDER = { right: 'down', down: 'left', left: 'up', up: 'right' };
-
   function layoutChain(chain, startIndex, feltW, feltH){
     var TILE_LEN = 56, TILE_TH = 28, GAP = 3;
+    var ROW_SPACING = TILE_LEN + 8;
     var margin = 30;
     var placements = new Array(chain.length);
     var centerX = feltW / 2, centerY = feltH / 2;
 
     placements[startIndex] = { x: centerX, y: centerY, vertical: true, w: TILE_TH, h: TILE_LEN };
 
-    function walk(fromIndex, toIndex, step, initialDir, startX, startY){
-      var cursor = { x: startX, y: startY, dir: initialDir };
+    // Real Dominican play: a row runs until it hits the table edge, a tile turns crosswise
+    // as the corner, and the next row continues in the opposite direction underneath it
+    // (a boustrophedon "snake"), rather than spiralling off in a whole new direction.
+    function walk(fromIndex, toIndex, step, initialDir, startX, startY, rowDir){
+      var x = startX, y = startY, dir = initialDir;
       for (var i = fromIndex; step > 0 ? i <= toIndex : i >= toIndex; i += step){
         var tile = chain[i];
-        var dirIsHorizontal = (cursor.dir === 'left' || cursor.dir === 'right');
         var along = tile.isDouble ? TILE_TH : TILE_LEN;
-        var across = tile.isDouble ? TILE_LEN : TILE_TH;
+        var overflow = dir === 'right' ? (x + along > feltW - margin) : (x - along < margin);
 
-        var tries = 0;
-        while (tries < 4){
-          var fitsX = true, fitsY = true;
-          if (cursor.dir === 'right') fitsX = (cursor.x + along) <= (feltW - margin);
-          if (cursor.dir === 'left') fitsX = (cursor.x - along) >= margin;
-          if (cursor.dir === 'down') fitsY = (cursor.y + along) <= (feltH - margin);
-          if (cursor.dir === 'up') fitsY = (cursor.y - along) >= margin;
-          if (fitsX && fitsY) break;
-          cursor.dir = TURN_ORDER[cursor.dir];
-          dirIsHorizontal = (cursor.dir === 'left' || cursor.dir === 'right');
-          along = tile.isDouble ? TILE_TH : TILE_LEN;
-          across = tile.isDouble ? TILE_LEN : TILE_TH;
-          tries++;
+        if (overflow){
+          var cornerAlong = TILE_TH;
+          var cx = dir === 'right' ? x + cornerAlong/2 : x - cornerAlong/2;
+          placements[i] = { x: cx, y: y, vertical: true, w: TILE_TH, h: TILE_LEN };
+          x = dir === 'right' ? x + cornerAlong + GAP : x - (cornerAlong + GAP);
+          y += rowDir * ROW_SPACING;
+          dir = dir === 'right' ? 'left' : 'right';
+        } else {
+          var renderVertical = tile.isDouble;
+          var cx2, cy2;
+          if (dir === 'right'){ cx2 = x + along/2; cy2 = y; x += along + GAP; }
+          else { cx2 = x - along/2; cy2 = y; x -= (along + GAP); }
+          placements[i] = { x: cx2, y: cy2, vertical: renderVertical, w: renderVertical ? TILE_TH : TILE_LEN, h: renderVertical ? TILE_LEN : TILE_TH };
         }
-
-        var cx, cy;
-        if (cursor.dir === 'right'){ cx = cursor.x + along/2; cy = cursor.y; cursor.x += along + GAP; }
-        else if (cursor.dir === 'left'){ cx = cursor.x - along/2; cy = cursor.y; cursor.x -= (along + GAP); }
-        else if (cursor.dir === 'down'){ cx = cursor.x; cy = cursor.y + along/2; cursor.y += along + GAP; }
-        else { cx = cursor.x; cy = cursor.y - along/2; cursor.y -= (along + GAP); }
-
-        var renderVertical = tile.isDouble ? dirIsHorizontal : !dirIsHorizontal;
-        placements[i] = { x: cx, y: cy, vertical: renderVertical, w: renderVertical ? TILE_TH : TILE_LEN, h: renderVertical ? TILE_LEN : TILE_TH };
       }
     }
 
-    walk(startIndex + 1, chain.length - 1, 1, 'right', centerX + TILE_TH/2 + GAP, centerY);
-    walk(startIndex - 1, 0, -1, 'left', centerX - TILE_TH/2 - GAP, centerY);
+    walk(startIndex + 1, chain.length - 1, 1, 'right', centerX + TILE_TH/2 + GAP, centerY, 1);
+    walk(startIndex - 1, 0, -1, 'left', centerX - TILE_TH/2 - GAP, centerY, -1);
 
     return placements;
   }
