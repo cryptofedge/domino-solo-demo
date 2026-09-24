@@ -26,11 +26,11 @@
   .felt{position:absolute;inset:0;border-radius:20px;background:radial-gradient(ellipse at 50% 38%, #1a5c34 0%, #0f4023 42%, #082a17 78%, #051c0e 100%);
     border:2px solid var(--gold-dim);box-shadow:inset 0 0 60px rgba(0,0,0,.65), inset 0 0 3px rgba(220,179,95,.3), 0 6px 16px rgba(0,0,0,.55);
     display:flex;align-items:center;justify-content:center;overflow:hidden;}
-  .chain-area{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:3px;padding:16px;max-width:100%;max-height:100%;overflow:auto;}
-  .seat{position:absolute;display:flex;flex-direction:column;align-items:center;gap:4px;}
+  .chain-area{display:flex;flex-direction:column;flex-wrap:wrap;align-items:center;justify-content:center;gap:3px;padding:16px;max-width:100%;max-height:100%;overflow:auto;}
+  .seat{position:absolute;display:flex;flex-direction:column;align-items:center;gap:4px;z-index:6;}
   .seat.north{top:-14px;left:50%;transform:translateX(-50%);flex-direction:row;padding:6px 12px;}
-  .seat.west{top:50%;left:-12px;transform:translateY(-50%);padding:8px 6px;}
-  .seat.east{top:50%;right:-12px;transform:translateY(-50%);padding:8px 6px;}
+  .seat.west{top:10px;left:10px;padding:6px 8px;}
+  .seat.east{top:10px;right:10px;padding:6px 8px;}
   .avatar{width:24px;height:24px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#4a2c14,#26160a);border:1.5px solid #9c7a34;
     display:flex;align-items:center;justify-content:center;color:var(--gold);font-size:9px;box-shadow:inset 0 0 6px rgba(0,0,0,.5);flex-shrink:0;}
   .seat .info{font-size:9px;color:#8a7a58;text-align:center;white-space:nowrap;}
@@ -45,10 +45,19 @@
     font-family:Georgia,serif;font-size:12px;color:#f7efd8;font-weight:700;cursor:pointer;letter-spacing:.03em;}
   .hand-row{display:flex;justify-content:center;gap:6px;padding:6px 10px 16px;position:relative;z-index:2;flex-wrap:wrap;}
   .tile-cyan{filter:drop-shadow(0 0 5px rgba(77,232,255,.5)) drop-shadow(0 2px 4px rgba(0,0,0,.5));}
-  .hand-tile{cursor:pointer;transition:transform 140ms ease;position:relative;}
-  .hand-tile.valid{cursor:pointer;}
+  .hand-tile{cursor:grab;transition:transform 140ms ease;position:relative;touch-action:none;}
+  .hand-tile.valid{cursor:grab;}
   .hand-tile.invalid{opacity:.32;cursor:not-allowed;filter:grayscale(.5);}
   .hand-tile.selected{transform:translateY(-10px) scale(1.08);z-index:5;filter:drop-shadow(0 0 12px rgba(227,189,111,.95)) drop-shadow(0 6px 8px rgba(0,0,0,.6));}
+  .hand-tile.dragging{cursor:grabbing;transition:none;pointer-events:none;}
+  .dropzone{position:absolute;left:0;right:0;height:50%;display:flex;align-items:center;justify-content:center;
+    opacity:0;pointer-events:none;transition:opacity 140ms ease;z-index:8;}
+  .dropzone.left{top:0;border-radius:20px 20px 0 0;}
+  .dropzone.right{bottom:0;border-radius:0 0 20px 20px;}
+  .dropzone.active{opacity:1;background:rgba(227,189,111,.10);}
+  .dropzone.hover{opacity:1;background:rgba(227,189,111,.26);}
+  .dropzone .dzlabel{border:1.5px dashed var(--gold);border-radius:12px;padding:8px 14px;color:var(--gold);font-size:11px;
+    letter-spacing:.06em;font-weight:700;background:rgba(10,7,4,.5);}
   @keyframes slamRoutine{
     0%{transform:perspective(320px) rotateY(65deg) scale(.9);opacity:.5;}
     55%{transform:perspective(320px) rotateY(0deg) scaleX(1.25) scaleY(.7);opacity:1;}
@@ -89,13 +98,14 @@
   </div>
 
   <div class="table-wrap">
-    <div class="felt">
+    <div class="felt" id="felt">
       <div class="chain-area" id="chainArea"></div>
+      <div class="dropzone left" id="dzLeft"><div class="dzlabel">▲ ARRIBA</div></div>
+      <div class="dropzone right" id="dzRight"><div class="dzlabel">ABAJO ▼</div></div>
 
       <div class="seat north" id="seatNorth">
         <div class="avatar">MB</div>
         <div class="info"><b id="northCount">7</b>Meche (compañera)</div>
-        <div id="northTiles"></div>
       </div>
       <div class="seat west" id="seatWest">
         <div class="avatar">PC</div>
@@ -409,7 +419,11 @@
     var html = defsSVG();
     for (var i = 0; i < state.chain.length; i++){
       var c = state.chain[i];
-      html += '<div class="chain-tile">' + tileSVG(c.a, c.b, 56, 28, false) + '</div>';
+      if (c.isDouble){
+        html += '<div class="chain-tile" style="display:flex;align-items:center;">' + tileSVG(c.a, c.b, 56, 28, false) + '</div>';
+      } else {
+        html += '<div class="chain-tile">' + tileSVG(c.a, c.b, 28, 56, true) + '</div>';
+      }
     }
     chainArea.innerHTML = html || '<div style="color:#4a3f2c;font-size:11px;">Esperando el doble 6…</div>';
 
@@ -419,11 +433,6 @@
       seatEl.classList.toggle('turn', state.turn === s && !state.over);
       document.getElementById((seatDef.el === 'north' ? 'north' : seatDef.el) + 'Count').textContent = state.hands[s].length;
     }
-    var nt = document.getElementById('northTiles');
-    var fd = '';
-    for (var k = 0; k < state.hands[2].length; k++) fd += '<span class="facedown"></span>';
-    nt.innerHTML = fd;
-
     var chip = document.getElementById('turnChip');
     chip.textContent = state.over ? 'Mano terminada' : (state.turn === 0 ? 'Tu turno' : SEATS[state.turn].name + ' está jugando…');
 
@@ -440,6 +449,9 @@
     document.getElementById('scoreA').textContent = state.scoreA;
     document.getElementById('scoreB').textContent = state.scoreB;
   }
+
+  var drag = null;
+  var DRAG_THRESHOLD = 8;
 
   function renderHand(){
     var row = document.getElementById('handRow');
@@ -464,8 +476,7 @@
           wrap.appendChild(picker);
         }
 
-        wrap.onclick = function(){
-          if (!isValid) return;
+        function playHere(){
           if (!state.chain.length){
             vibrate(30);
             playTile(0, tile, 'left');
@@ -479,10 +490,118 @@
           }
           vibrate(30);
           playTile(0, tile, m.left ? 'left' : 'right');
-        };
+        }
+
+        wrap.addEventListener('pointerdown', function(e){
+          if (!isValid) return;
+          if (e.pointerType === 'mouse' && e.button !== 0) return;
+          startPotentialDrag(e, tile, idx, wrap, m, playHere);
+        });
+
         row.appendChild(wrap);
       })(hand[i], i);
     }
+  }
+
+  function startPotentialDrag(e, tile, idx, el, matches, tapFallback){
+    var startX = e.clientX, startY = e.clientY;
+    var pointerId = e.pointerId;
+    var dragging = false;
+    var rect = el.getBoundingClientRect();
+    var offsetX = e.clientX - rect.left, offsetY = e.clientY - rect.top;
+    var origW = rect.width, origH = rect.height;
+
+    function onMove(ev){
+      if (ev.pointerId !== pointerId) return;
+      var dx = ev.clientX - startX, dy = ev.clientY - startY;
+      if (!dragging){
+        if (Math.abs(dx) < DRAG_THRESHOLD && Math.abs(dy) < DRAG_THRESHOLD) return;
+        dragging = true;
+        drag = { tile: tile, idx: idx, matches: matches };
+        el.classList.add('dragging');
+        el.style.position = 'fixed';
+        el.style.width = origW + 'px';
+        el.style.height = origH + 'px';
+        el.style.left = (rect.left) + 'px';
+        el.style.top = (rect.top) + 'px';
+        el.style.transform = 'scale(1.12) rotate(-3deg)';
+        el.style.filter = 'drop-shadow(0 10px 16px rgba(0,0,0,.6)) drop-shadow(0 0 14px rgba(227,189,111,.7))';
+        vibrate(15);
+        showDropZones(matches);
+      }
+      el.style.left = (ev.clientX - offsetX) + 'px';
+      el.style.top = (ev.clientY - offsetY) + 'px';
+      updateDropZoneHover(ev.clientX, ev.clientY);
+      ev.preventDefault();
+    }
+
+    function onUp(ev){
+      if (ev.pointerId !== pointerId) return;
+      document.removeEventListener('pointermove', onMove);
+      document.removeEventListener('pointerup', onUp);
+      document.removeEventListener('pointercancel', onUp);
+      if (!dragging){
+        tapFallback();
+        return;
+      }
+      var side = resolveDropSide(ev.clientX, ev.clientY, matches);
+      hideDropZones();
+      drag = null;
+      if (side){
+        vibrate(30);
+        playTile(0, tile, side);
+      } else {
+        render();
+      }
+    }
+
+    document.addEventListener('pointermove', onMove);
+    document.addEventListener('pointerup', onUp);
+    document.addEventListener('pointercancel', onUp);
+  }
+
+  function showDropZones(matches){
+    var dzL = document.getElementById('dzLeft');
+    var dzR = document.getElementById('dzRight');
+    var bothSidesOpen = state.chain.length > 0 && leftEnd() !== rightEnd();
+    if (!state.chain.length || !bothSidesOpen){
+      dzL.classList.toggle('active', !!(matches.left || !state.chain.length));
+      dzR.classList.toggle('active', !!(matches.right || !state.chain.length));
+    } else {
+      dzL.classList.toggle('active', matches.left);
+      dzR.classList.toggle('active', matches.right);
+    }
+  }
+
+  function hideDropZones(){
+    document.getElementById('dzLeft').classList.remove('active', 'hover');
+    document.getElementById('dzRight').classList.remove('active', 'hover');
+  }
+
+  function updateDropZoneHover(clientX, clientY){
+    var dzL = document.getElementById('dzLeft');
+    var dzR = document.getElementById('dzRight');
+    var lr = dzL.getBoundingClientRect();
+    var rr = dzR.getBoundingClientRect();
+    var overL = dzL.classList.contains('active') && clientX >= lr.left && clientX <= lr.right && clientY >= lr.top && clientY <= lr.bottom;
+    var overR = dzR.classList.contains('active') && clientX >= rr.left && clientX <= rr.right && clientY >= rr.top && clientY <= rr.bottom;
+    dzL.classList.toggle('hover', overL);
+    dzR.classList.toggle('hover', overR);
+  }
+
+  function resolveDropSide(clientX, clientY, matches){
+    var felt = document.getElementById('felt').getBoundingClientRect();
+    if (clientX < felt.left || clientX > felt.right || clientY < felt.top || clientY > felt.bottom) return null;
+    if (!state.chain.length) return 'left';
+    var bothSidesOpen = leftEnd() !== rightEnd();
+    if (!bothSidesOpen){
+      if (matches.left) return 'left';
+      if (matches.right) return 'right';
+      return null;
+    }
+    var midY = felt.top + felt.height / 2;
+    if (clientY < midY) return matches.left ? 'left' : (matches.right ? 'right' : null);
+    return matches.right ? 'right' : (matches.left ? 'left' : null);
   }
 
   document.getElementById('modalPlayAgain').addEventListener('click', function(){
